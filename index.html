@@ -626,7 +626,7 @@
       mouthEl.textContent = mouthState;
       faceVisibleEl.textContent = faceVisible;
 
-      const payload = `R${rightEyeState},L${leftEyeState},M${mouthState},V${headV},H${headH},F${faceVisible}`;
+      const payload = `L${leftEyeState},R${rightEyeState},M${mouthState},V${headV},H${headH},F${faceVisible}`;
       if (payload !== lastSent){
         lastSent = payload;
         lastPayloadEl.textContent = payload;
