@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Face Mask — Detection & Tracking (Merged, Matching Overlay)</title>
+  <style>
+    :root{
+      --bg:#0d0f12;
+      --card:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      --accent:#00e0ff;
+      --muted:#9fdfff;
+      --radius:12px;
+      --gap:14px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:#eafcff;font-family:Inter,Segoe UI,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    .container{max-width:1180px;margin:20px auto;padding:18px;display:grid;grid-template-columns:1fr 360px;gap:var(--gap);align-items:start}
+    header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .title{display:flex;flex-direction:column;gap:4px}
+    h1{margin:0;font-size:20px;font-weight:800}
+    p.lead{margin:0;color:#9fdfff88;font-size:13px}
+    .controls{display:flex;gap:10px;align-items:center}
+    .btn{padding:10px 14px;border-radius:12px;border:0;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.03); color:#dffcff}
+    .btn.primary{background:linear-gradient(90deg,#00c3ff,#00ffa3);color:#032022}
+    .status{background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:10px;color:var(--muted);font-weight:700;font-size:13px}
+    .video-wrap{background:#000;border-radius:var(--radius);overflow:hidden;min-height:320px;display:flex;align-items:center;justify-content:center}
+    /* Keep fixed canvas internal pixel size 1280x720 (matches mask-only code). Change displayed height via CSS if needed */
+    canvas#output{display:block;width:100%;height:auto;background:#000}
+    video#inputVideo{display:none}
+    aside.panel{display:flex;flex-direction:column;gap:12px}
+    .card{background:var(--card);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.02)}
+    .grid-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .stat{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px;font-weight:800;display:flex;flex-direction:column;gap:6px}
+    .stat .label{font-size:12px;color:#bfefff}
+    .stat .value{font-size:24px}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;color:var(--accent);font-weight:800;text-align:center}
+    .small{font-size:12px;color:#9fdfff88}
+    @media (max-width:980px){.container{grid-template-columns:1fr;padding:14px} aside.panel{order:2}}
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title">
+        <h1>Face Mask — Detection & Tracking</h1>
+        <p class="lead">Merged mask-only overlay (keeps exact visual matching) + detection UI on right.</p>
+      </div>
+
+      <div class="controls" aria-hidden="false">
+        <button id="connectBtn" class="btn primary" title="Connect / Disconnect Arduino">Connect Arduino</button>
+        <button id="calibrateBtn" class="btn" title="Calibrate neutral head position">Calibrate Neutral</button>
+        <div id="connStatus" class="status" role="status" aria-live="polite">Camera starting...</div>
+      </div>
+    </header>
+
+    <main class="video-wrap" aria-label="Camera preview and face overlay">
+      <!-- Keep canvas pixel size 1280x720 (same as mask-only). This ensures identical drawing coordinates. -->
+      <canvas id="output" width="1280" height="720" aria-hidden="false"></canvas>
+      <video id="inputVideo" autoplay playsinline muted></video>
+    </main>
+
+    <aside class="panel" aria-label="Face status panel">
+      <div class="card">
+        <div style="font-weight:800;margin-bottom:8px">Detection</div>
+
+        <!-- Arranged as requested:
+             Row1: Left Eye | Right Eye
+             Row2: Head Horizontal | Head Vertical
+             Row3: Mouth | Face Visible
+        -->
+        <div class="grid-stats">
+          <div class="stat">
+            <div class="label">Left Eye</div>
+            <div id="leftEye" class="value mono">—</div>
+          </div>
+
+          <div class="stat">
+            <div class="label">Right Eye</div>
+            <div id="rightEye" class="value mono">—</div>
+          </div>
+
+          <div class="stat">
+            <div class="label">Head Horizontal (H)</div>
+            <div id="headH" class="value mono">—</div>
+          </div>
+
+          <div class="stat">
+            <div class="label">Head Vertical (V)</div>
+            <div id="headV" class="value mono">—</div>
+          </div>
+
+          <div class="stat">
+            <div class="label">Mouth</div>
+            <div id="mouth" class="value mono">—</div>
+          </div>
+
+          <div class="stat">
+            <div class="label">Face Visible</div>
+            <div id="faceVisible" class="value mono">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:8px">
+        <div style="font-weight:800;margin-bottom:8px">Last payload sent</div>
+        <div id="lastPayload" class="mono">—</div>
+      </div>
+
+      <div class="card small">
+        <div><strong>Notes:</strong></div>
+        <ul style="margin:8px 0 0 16px;padding:0">
+          <li>Use Chrome/Edge for Web Serial API & camera support.</li>
+          <li>Click <strong>Calibrate Neutral</strong> while facing straight at camera to set baseline.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // UI refs
+    const canvas = document.getElementById('output');
+    const videoEl = document.getElementById('inputVideo');
+    const ctx = canvas.getContext('2d');
+    const connectBtn = document.getElementById('connectBtn');
+    const calibrateBtn = document.getElementById('calibrateBtn');
+    const connStatus = document.getElementById('connStatus');
+
+    const rightEyeEl = document.getElementById('rightEye');
+    const leftEyeEl = document.getElementById('leftEye');
+    const mouthEl = document.getElementById('mouth');
+    const headVEl = document.getElementById('headV');
+    const headHEl = document.getElementById('headH');
+    const faceVisibleEl = document.getElementById('faceVisible');
+    const lastPayloadEl = document.getElementById('lastPayload');
+
+    // mirror preview visually (same as mask-only code)
+    const MIRROR_PREVIEW = true;
+
+    // ---------- Web Serial ----------
+    let port = null, writer = null, serialConnected = false;
+    const encoder = new TextEncoder();
+    let writeQueue = Promise.resolve();
+    function queueOp(op){ writeQueue = writeQueue.then(op, op); return writeQueue; }
+
+    async function connectArduino(){
+      if (serialConnected) { await disconnectArduino(); return; }
+      if (!('serial' in navigator)) { alert('Web Serial API not supported. Use Chrome or Edge.'); return; }
+      try {
+        connectBtn.textContent = 'Requesting port...';
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        writer = port.writable.getWriter();
+        serialConnected = true;
+        connStatus.textContent = 'Connected / Camera ready';
+        connectBtn.textContent = 'Disconnect';
+        readLoop().catch(()=>{});
+      } catch (err) {
+        console.error('Serial open failed', err);
+        serialConnected = false;
+        connStatus.textContent = 'Not connected / Camera ready';
+        connectBtn.textContent = 'Connect Arduino';
+        try { if (port) await port.close(); } catch(e) {}
+        port = null;
+      }
+    }
+
+    async function disconnectArduino(){
+      connectBtn.textContent = 'Disconnecting...';
+      try { if (writer) { await writer.close(); writer.releaseLock(); writer = null; } } catch(e) {}
+      try { if (port) await port.close(); } catch(e) {}
+      port = null; serialConnected = false;
+      connStatus.textContent = 'Not connected / Camera ready';
+      connectBtn.textContent = 'Connect Arduino';
+    }
+
+    async function readLoop(){
+      if (!port || !port.readable) return;
+      const reader = port.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+        }
+      } catch (e) {} finally { try { reader.releaseLock(); } catch(e){} }
+    }
+
+    function sendSerialLine(line){
+      if (!serialConnected || !writer) return;
+      return queueOp(async () => {
+        try { await writer.write(encoder.encode(line + '\n')); } catch (e) { console.error('Write failed', e); }
+      });
+    }
+    connectBtn.addEventListener('click', connectArduino);
+
+    // ---------- MediaPipe FaceMesh (use same init as mask-only code) ----------
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(onResults);
+
+    // Start camera using same config as mask-only example (ensures matching)
+    const camera = new Camera(videoEl, {
+      onFrame: async () => { await faceMesh.send({ image: videoEl }); },
+      width: 1280,
+      height: 720,
+      facingMode: 'user'
+    });
+
+    camera.start().then(() => {
+      connStatus.textContent = 'Not connected / Camera ready';
+      // keep canvas pixel size matching attribute (1280x720). The mask-only code used fixed canvas size.
+      // If you want to reduce shown height, change CSS .video-wrap min-height or canvas display size.
+    }).catch((e) => {
+      console.error('Camera start failed', e);
+      connStatus.textContent = 'Camera unavailable';
+    });
+
+    // ---------- helpers & indices ----------
+    const RIGHT_EYE_IDX = [33,159,158,133,153,145];
+    const LEFT_EYE_IDX  = [362,380,374,263,386,385];
+    const MOUTH_TOP = 13;
+    const MOUTH_BOTTOM = 14;
+    const MOUTH_LEFT = 78;
+    const MOUTH_RIGHT = 308;
+    const NOSE_TIP = 1;
+
+    const dist = (a,b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    function eyeRatio(landmarks, idxs){
+      const p0 = landmarks[idxs[0]], p1 = landmarks[idxs[1]], p2 = landmarks[idxs[2]];
+      const p3 = landmarks[idxs[3]], p4 = landmarks[idxs[4]], p5 = landmarks[idxs[5]];
+      const vert = (dist(p1,p4) + dist(p2,p5)) / 2;
+      const hor = dist(p0,p3);
+      return hor === 0 ? 0 : vert / hor;
+    }
+    function mouthRatio(landmarks){
+      const top = landmarks[MOUTH_TOP], bottom = landmarks[MOUTH_BOTTOM];
+      const left = landmarks[MOUTH_LEFT], right = landmarks[MOUTH_RIGHT];
+      const vert = dist(top,bottom);
+      const hor = dist(left,right);
+      return hor === 0 ? 0 : vert / hor;
+    }
+
+    // thresholds (tweak if needed)
+    const EYE_OPEN_THRESHOLD = 0.22;
+    const MOUTH_OPEN_THRESHOLD = 0.28;
+    const HEAD_X_THRESHOLD = 0.035;
+    const HEAD_Y_THRESHOLD = 0.035;
+
+    // baseline for neutral head; re-calibrate by clearing baseline
+    let baseline = null;
+    calibrateBtn.addEventListener('click', () => { baseline = null; connStatus.textContent = 'Baseline cleared — will recalibrate on next face frame'; });
+
+    let lastSent = '';
+
+    // draw exactly the mask-only visuals (matching)
+    function drawMaskExact(landmarks){
+      drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, {color: 'rgba(255,255,255,0.3)', lineWidth: 1});
+      drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, {color: '#00E0FF', lineWidth: 2});
+      drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYEBROW, {color: '#FFD500', lineWidth: 2});
+      drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYE, {color: '#00E0FF', lineWidth: 2});
+      drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYEBROW, {color: '#FFD500', lineWidth: 2});
+      drawConnectors(ctx, landmarks, FACEMESH_FACE_OVAL, {color: '#FFFFFF', lineWidth: 2});
+      drawConnectors(ctx, landmarks, FACEMESH_LIPS, {color: '#FF6347', lineWidth: 2});
+    }
+
+    // ---------- main results callback (merged) ----------
+    function onResults(results){
+      // Use the same drawing technique as mask-only code so overlay matches precisely
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Mirror preview for selfie mode (canvas.width is 1280, canvas.height is 720)
+      if (MIRROR_PREVIEW){
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+      // draw video frame into canvas
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+      // draw mask connectors exactly as the mask-only code
+      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0){
+        for (const landmarks of results.multiFaceLandmarks){
+          drawMaskExact(landmarks);
+        }
+      }
+
+      ctx.restore();
+
+      // --- compute detection/states using raw normalized landmarks (NOT mirrored) ---
+      const hasFace = !!(results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0);
+      if (!hasFace){
+        rightEyeEl.textContent = '—';
+        leftEyeEl.textContent = '—';
+        mouthEl.textContent = '—';
+        headVEl.textContent = '—';
+        headHEl.textContent = '—';
+        faceVisibleEl.textContent = 0;
+        lastPayloadEl.textContent = '—';
+        lastSent = '';
+        return;
+      }
+
+      const landmarks = results.multiFaceLandmarks[0];
+
+      // compute ratios
+      const rRatio = eyeRatio(landmarks, RIGHT_EYE_IDX);
+      const lRatio = eyeRatio(landmarks, LEFT_EYE_IDX);
+      const mRatio = mouthRatio(landmarks);
+
+      const rightEyeState = rRatio > EYE_OPEN_THRESHOLD ? 1 : 0;
+      const leftEyeState  = lRatio > EYE_OPEN_THRESHOLD ? 1 : 0;
+      const mouthState    = mRatio > MOUTH_OPEN_THRESHOLD ? 1 : 0;
+
+      // baseline by nose tip (normalized)
+      const nose = landmarks[NOSE_TIP];
+      if (!baseline) baseline = { x: nose.x, y: nose.y };
+
+      const dx = nose.x - baseline.x;
+      const dy = nose.y - baseline.y;
+
+      let headV = 0;
+      if (dy < -HEAD_Y_THRESHOLD) headV = -1;
+      else if (dy > HEAD_Y_THRESHOLD) headV = 1;
+      else headV = 0;
+
+      let headH = 0;
+      if (dx < -HEAD_X_THRESHOLD) headH = -1;
+      else if (dx > HEAD_X_THRESHOLD) headH = 1;
+      else headH = 0;
+
+      const faceVisible = 1;
+
+      // update UI (arranged)
+      leftEyeEl.textContent = leftEyeState;
+      rightEyeEl.textContent = rightEyeState;
+      headHEl.textContent = headH;
+      headVEl.textContent = headV;
+      mouthEl.textContent = mouthState;
+      faceVisibleEl.textContent = faceVisible;
+
+      // payload
+      const payload = `R:${rightEyeState},L:${leftEyeState},M:${mouthState},V:${headV},H:${headH},F:${faceVisible}`;
+      if (payload !== lastSent){
+        lastSent = payload;
+        lastPayloadEl.textContent = payload;
+        if (serialConnected) sendSerialLine(payload);
+      }
+    }
+
+    // cleanup on unload
+    window.addEventListener('beforeunload', async () => {
+      try { if (writer) { await writer.close(); writer = null; } if (port) { await port.close(); } } catch (e) {}
+    });
+  </script>
+</body>
+</html>
