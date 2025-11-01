@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Face Detection and Tracking - Microbit + Arduino (stable H/V)</title>
+  <title>Face Detection and Tracking - Microbit + Arduino (L/R/M/F/H/V)</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <style>
     :root{
@@ -37,11 +37,15 @@
     video#inputVideo{display:none}
     aside.panel{display:flex;flex-direction:column;gap:12px}
     .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.015));padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);box-shadow:0 6px 20px rgba(0,0,0,0.6)}
+    /* Layout adjusted to match requested order:
+       Row1: Left Eye | Right Eye
+       Row2: Mouth    | Face Visible
+       Row3: Horizontal | Vertical
+    */
     .grid-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
     .stat{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px;font-weight:800;display:flex;flex-direction:column;gap:6px}
     .stat .label{font-size:12px;color:#bfefff}
     .stat .value{font-size:18px}
-    .frame{background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;backdrop-filter:blur(6px)}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;color:var(--payload-color);word-break:break-word;font-size:20px;font-weight:800;text-align:center}
     .small{font-size:12px;color:#9fdfff88}
     @media(max-width:980px){
@@ -75,7 +79,6 @@
 
     <main class="video-wrap" aria-label="Camera preview and face overlay">
       <div class="canvas-wrap">
-        <!-- Fixed internal canvas pixels to match mask-only drawing -->
         <canvas id="output" width="1280" height="720" aria-hidden="false"></canvas>
         <video id="inputVideo" autoplay playsinline muted></video>
       </div>
@@ -86,6 +89,7 @@
         <div style="font-weight:800;margin-bottom:8px">Detection</div>
 
         <div class="grid-stats">
+          <!-- Row 1 -->
           <div class="stat frame">
             <div class="label">Left Eye</div>
             <div id="leftEye" class="value mono">—</div>
@@ -96,16 +100,7 @@
             <div id="rightEye" class="value mono">—</div>
           </div>
 
-          <div class="stat frame">
-            <div class="label">Head Horizontal (H)</div>
-            <div id="headH" class="value mono">—</div>
-          </div>
-
-          <div class="stat frame">
-            <div class="label">Head Vertical (V)</div>
-            <div id="headV" class="value mono">—</div>
-          </div>
-
+          <!-- Row 2 -->
           <div class="stat frame">
             <div class="label">Mouth</div>
             <div id="mouth" class="value mono">—</div>
@@ -114,6 +109,17 @@
           <div class="stat frame">
             <div class="label">Face Visible</div>
             <div id="faceVisible" class="value mono">—</div>
+          </div>
+
+          <!-- Row 3 -->
+          <div class="stat frame">
+            <div class="label">Horizontal (H)</div>
+            <div id="headH" class="value mono">—</div>
+          </div>
+
+          <div class="stat frame">
+            <div class="label">Vertical (V)</div>
+            <div id="headV" class="value mono">—</div>
           </div>
         </div>
       </div>
@@ -141,8 +147,8 @@
     const connectMicrobitBtn = document.getElementById('connectMicrobitBtn');
     const connStatus = document.getElementById('connStatus');
 
-    const rightEyeEl = document.getElementById('rightEye');
     const leftEyeEl = document.getElementById('leftEye');
+    const rightEyeEl = document.getElementById('rightEye');
     const mouthEl = document.getElementById('mouth');
     const headVEl = document.getElementById('headV');
     const headHEl = document.getElementById('headH');
@@ -538,8 +544,8 @@
     // thresholds (in normalized coordinates). increased so micro-movements don't flip states.
     const EYE_OPEN_THRESHOLD = 0.22;
     const MOUTH_OPEN_THRESHOLD = 0.28;
-    const HEAD_X_THRESHOLD = 0.06; // increased horizontal threshold (was ~0.035)
-    const HEAD_Y_THRESHOLD = 0.06; // increased vertical threshold
+    const HEAD_X_THRESHOLD = 0.06; // horizontal threshold
+    const HEAD_Y_THRESHOLD = 0.06; // vertical threshold
 
     // smoothing & hysteresis settings
     const EMA_ALPHA = 0.12;    // nose smoothing (higher = more responsive; lower = smoother)
@@ -557,7 +563,7 @@
     let currentHeadH = 0;
     let currentHeadV = 0;
 
-    // draw exactly the mask-only visuals (matching)
+    // draw mask visuals
     function drawMaskExact(landmarks){
       drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, {color: 'rgba(255,255,255,0.3)', lineWidth: 1});
       drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, {color: '#00E0FF', lineWidth: 2});
@@ -571,7 +577,7 @@
     // ---------- main results callback ----------
     let lastSent = '';
     function onResults(results){
-      // Draw video + mask overlay exactly as mask-only code
+      // Draw video + mask overlay
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -593,15 +599,14 @@
       // Detection stats and payload
       const hasFace = !!(results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0);
       if (!hasFace){
-        rightEyeEl.textContent = '—';
         leftEyeEl.textContent = '—';
+        rightEyeEl.textContent = '—';
         mouthEl.textContent = '—';
         headVEl.textContent = '—';
         headHEl.textContent = '—';
         faceVisibleEl.textContent = 0;
         lastPayloadEl.textContent = '—';
         lastSent = '';
-        // reset smoothing/baseline candidates so we don't get stuck
         baseline = null; smoothedNose = null;
         headH_candidate = headV_candidate = 0;
         headH_counter = headV_counter = 0;
@@ -611,7 +616,7 @@
 
       const landmarks = results.multiFaceLandmarks[0];
 
-      // compute ratios for eyes/mouth
+      // compute ratios
       const rRatio = eyeRatio(landmarks, RIGHT_EYE_IDX);
       const lRatio = eyeRatio(landmarks, LEFT_EYE_IDX);
       const mRatio = mouthRatio(landmarks);
@@ -620,14 +625,11 @@
       const leftEyeState  = lRatio > EYE_OPEN_THRESHOLD ? 1 : 0;
       const mouthState    = mRatio > MOUTH_OPEN_THRESHOLD ? 1 : 0;
 
-      // nose (normalized coordinates)
+      // nose smoothing & baseline
       const nose = landmarks[NOSE_TIP];
-
-      // initialize smoothed nose and baseline on first valid frame
       if (!smoothedNose) {
         smoothedNose = { x: nose.x, y: nose.y };
       } else {
-        // EMA smoothing
         smoothedNose.x += (nose.x - smoothedNose.x) * EMA_ALPHA;
         smoothedNose.y += (nose.y - smoothedNose.y) * EMA_ALPHA;
       }
@@ -635,16 +637,14 @@
       if (!baseline) {
         baseline = { x: smoothedNose.x, y: smoothedNose.y };
       } else {
-        // Very slow baseline adaptation to avoid long-term drift while keeping short-term stability
         baseline.x += (smoothedNose.x - baseline.x) * BASELINE_ADAPT_ALPHA;
         baseline.y += (smoothedNose.y - baseline.y) * BASELINE_ADAPT_ALPHA;
       }
 
-      // difference from baseline
       const dx = smoothedNose.x - baseline.x;
       const dy = smoothedNose.y - baseline.y;
 
-      // compute candidate directions using thresholds
+      // candidate directions
       let candidateH = 0;
       if (dx < -HEAD_X_THRESHOLD) candidateH = -1;
       else if (dx > HEAD_X_THRESHOLD) candidateH = 1;
@@ -655,14 +655,13 @@
       else if (dy > HEAD_Y_THRESHOLD) candidateV = 1;
       else candidateV = 0;
 
-      // hysteresis: require STABLE_FRAMES_REQUIRED consecutive frames of same candidate to accept change
+      // hysteresis
       if (candidateH === headH_candidate) {
         headH_counter = Math.min(headH_counter + 1, STABLE_FRAMES_REQUIRED);
       } else {
         headH_candidate = candidateH;
         headH_counter = 1;
       }
-
       if (candidateV === headV_candidate) {
         headV_counter = Math.min(headV_counter + 1, STABLE_FRAMES_REQUIRED);
       } else {
@@ -670,7 +669,6 @@
         headV_counter = 1;
       }
 
-      // Accept candidate only when counter reached threshold
       if (headH_counter >= STABLE_FRAMES_REQUIRED && currentHeadH !== headH_candidate) {
         currentHeadH = headH_candidate;
       }
@@ -681,13 +679,14 @@
       // update UI
       leftEyeEl.textContent = leftEyeState;
       rightEyeEl.textContent = rightEyeState;
-      headHEl.textContent = currentHeadH;
-      headVEl.textContent = currentHeadV;
       mouthEl.textContent = mouthState;
       faceVisibleEl.textContent = 1;
+      headHEl.textContent = currentHeadH;
+      headVEl.textContent = currentHeadV;
 
-      // Build payload in the requested order: R...,L...,M...,V...,H...,F...
-      const payload = `R${rightEyeState},L${leftEyeState},M${mouthState},V${currentHeadV},H${currentHeadH},F1`;
+      // payload order: L,R,M,F,H,V
+      const faceVisible = 1;
+      const payload = `L${leftEyeState},R${rightEyeState},M${mouthState},F${faceVisible},H${currentHeadH},V${currentHeadV}`;
       if (payload !== lastSent){
         lastSent = payload;
         lastPayloadEl.textContent = payload;
@@ -710,7 +709,7 @@
       try { if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) bleDevice.gatt.disconnect(); } catch(e){}
     });
 
-    // small state monitor to keep UI consistent
+    // state monitor
     const stateMonitorInterval = setInterval(() => {
       if (bleDevice && bleDevice.gatt) {
         const nowBle = !!bleDevice.gatt.connected;
@@ -738,8 +737,6 @@
         if (!bleConnected) {
           connStatus.style.display = '';
           connStatus.textContent = 'Not connected';
-        } else {
-          // BLE branch has set status
         }
         connectArduinoBtn.textContent = 'Connect Arduino';
       }
