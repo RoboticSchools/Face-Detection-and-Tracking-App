@@ -3,40 +3,51 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Face Mask — Detection & Tracking (Merged, Matching Overlay)</title>
+  <title>Face Mask — Detection & Tracking (Hand-style GUI)</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <style>
     :root{
       --bg:#0d0f12;
-      --card:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-      --accent:#00e0ff;
+      --panel:#0f1115;
+      --card:rgba(255,255,255,0.03);
       --muted:#9fdfff;
-      --radius:12px;
-      --gap:14px;
+      --accent:linear-gradient(90deg,#00c3ff,#00ffa3);
+      --glass:rgba(255,255,255,0.03);
+      --radius:14px;
+      --gap:16px;
+      --fw-bold:800;
+      --payload-color:#00e0ff;
     }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;background:var(--bg);color:#eafcff;font-family:Inter,Segoe UI,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-    .container{max-width:1180px;margin:20px auto;padding:18px;display:grid;grid-template-columns:1fr 360px;gap:var(--gap);align-items:start}
-    header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px}
-    .title{display:flex;flex-direction:column;gap:4px}
-    h1{margin:0;font-size:20px;font-weight:800}
-    p.lead{margin:0;color:#9fdfff88;font-size:13px}
-    .controls{display:flex;gap:10px;align-items:center}
-    .btn{padding:10px 14px;border-radius:12px;border:0;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.03); color:#dffcff}
-    .btn.primary{background:linear-gradient(90deg,#00c3ff,#00ffa3);color:#032022}
-    .status{background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:10px;color:var(--muted);font-weight:700;font-size:13px}
-    .video-wrap{background:#000;border-radius:var(--radius);overflow:hidden;min-height:320px;display:flex;align-items:center;justify-content:center}
-    /* Keep fixed canvas internal pixel size 1280x720 (matches mask-only code). Change displayed height via CSS if needed */
+    html,body{height:100%;margin:0;background:var(--bg);color:#eafcff;font-family:Inter,Segoe UI,Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    .top-header{position:fixed;top:18px;left:18px;z-index:200;display:flex;align-items:center;gap:10px}
+    .logo{height:52px;width:auto;cursor:pointer;transition:transform .18s ease}
+    .logo:hover{transform:scale(1.04)}
+    .container{max-width:1180px;margin:50px auto;padding:18px;display:grid;grid-template-columns:1fr 340px;gap:var(--gap);align-items:start}
+    header{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:18px;margin-bottom:0}
+    h1{margin:0;font-size:22px;font-weight:var(--fw-bold);text-align:center}
+    .lead{font-size:13px;color:#9fdfff88;margin:0}
+    .controls{display:flex;align-items:center;gap:14px;justify-content:center}
+    .btn{padding:10px 14px;border-radius:12px;border:0;font-weight:700;cursor:pointer;background:var(--glass);color:#dffcff;backdrop-filter:blur(6px)}
+    .btn.primary{background:var(--accent);color:#032022;box-shadow:0 6px 24px rgba(0,195,255,0.08),inset 0 -2px 0 rgba(0,0,0,0.12)}
+    .status{background:var(--card);padding:8px 10px;border-radius:10px;color:var(--muted);font-weight:700;font-size:13px;margin:0 6px;min-width:220px;text-align:center}
+    .video-wrap{background:#000;border-radius:var(--radius);overflow:hidden;min-height:380px;display:flex;flex-direction:column}
+    .canvas-wrap{position:relative;width:100%;height:100%}
     canvas#output{display:block;width:100%;height:auto;background:#000}
     video#inputVideo{display:none}
     aside.panel{display:flex;flex-direction:column;gap:12px}
-    .card{background:var(--card);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.02)}
-    .grid-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.015));padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);box-shadow:0 6px 20px rgba(0,0,0,0.6)}
+    .grid-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
     .stat{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px;font-weight:800;display:flex;flex-direction:column;gap:6px}
     .stat .label{font-size:12px;color:#bfefff}
-    .stat .value{font-size:24px}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;color:var(--accent);font-weight:800;text-align:center}
+    .stat .value{font-size:18px}
+    .frame{background:rgba(255,255,255,0.02);border-radius:10px;padding:12px;backdrop-filter:blur(6px)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;color:var(--payload-color);word-break:break-word;font-size:20px;font-weight:800;text-align:center}
     .small{font-size:12px;color:#9fdfff88}
-    @media (max-width:980px){.container{grid-template-columns:1fr;padding:14px} aside.panel{order:2}}
+    @media(max-width:980px){
+      .container{grid-template-columns:1fr;padding:14px}
+      aside.panel{order:2}
+    }
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -44,78 +55,78 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 </head>
 <body>
+  <header class="top-header" aria-hidden="true">
+    <img src="logo.png" alt="Robotic Schools Logo" class="logo">
+  </header>
+
   <div class="container">
     <header>
-      <div class="title">
-        <h1>Face Mask — Detection & Tracking</h1>
-        <p class="lead">Merged mask-only overlay (keeps exact visual matching) + detection UI on right.</p>
-      </div>
+      <h1>Face Detection and Tracking - Microbit + Arduino App</h1>
+
+      <div style="height:8px"></div>
 
       <div class="controls" aria-hidden="false">
-        <button id="connectBtn" class="btn primary" title="Connect / Disconnect Arduino">Connect Arduino</button>
-        <button id="calibrateBtn" class="btn" title="Calibrate neutral head position">Calibrate Neutral</button>
+        <button id="connectArduinoBtn" class="btn primary" title="Connect / Disconnect Arduino">Connect Arduino</button>
         <div id="connStatus" class="status" role="status" aria-live="polite">Camera starting...</div>
+        <button id="connectMicrobitBtn" class="btn primary" title="Connect / Disconnect micro:bit">Connect micro:bit</button>
       </div>
+      <div style="height:6px"></div>
     </header>
 
     <main class="video-wrap" aria-label="Camera preview and face overlay">
-      <!-- Keep canvas pixel size 1280x720 (same as mask-only). This ensures identical drawing coordinates. -->
-      <canvas id="output" width="1280" height="720" aria-hidden="false"></canvas>
-      <video id="inputVideo" autoplay playsinline muted></video>
+      <div class="canvas-wrap">
+        <!-- Fixed internal canvas pixels to match mask-only drawing -->
+        <canvas id="output" width="1280" height="720" aria-hidden="false"></canvas>
+        <video id="inputVideo" autoplay playsinline muted></video>
+      </div>
     </main>
 
     <aside class="panel" aria-label="Face status panel">
       <div class="card">
         <div style="font-weight:800;margin-bottom:8px">Detection</div>
 
-        <!-- Arranged as requested:
-             Row1: Left Eye | Right Eye
-             Row2: Head Horizontal | Head Vertical
-             Row3: Mouth | Face Visible
-        -->
         <div class="grid-stats">
-          <div class="stat">
+          <div class="stat frame">
             <div class="label">Left Eye</div>
             <div id="leftEye" class="value mono">—</div>
           </div>
 
-          <div class="stat">
+          <div class="stat frame">
             <div class="label">Right Eye</div>
             <div id="rightEye" class="value mono">—</div>
           </div>
 
-          <div class="stat">
+          <div class="stat frame">
             <div class="label">Head Horizontal (H)</div>
             <div id="headH" class="value mono">—</div>
           </div>
 
-          <div class="stat">
+          <div class="stat frame">
             <div class="label">Head Vertical (V)</div>
             <div id="headV" class="value mono">—</div>
           </div>
 
-          <div class="stat">
+          <div class="stat frame">
             <div class="label">Mouth</div>
             <div id="mouth" class="value mono">—</div>
           </div>
 
-          <div class="stat">
+          <div class="stat frame">
             <div class="label">Face Visible</div>
             <div id="faceVisible" class="value mono">—</div>
           </div>
         </div>
       </div>
 
-      <div class="card" style="margin-top:8px">
-        <div style="font-weight:800;margin-bottom:8px">Last payload sent</div>
+      <div class="card frame" style="margin-top:8px">
+        <div style="font-weight:800;margin-bottom:8px">Sent to Device</div>
         <div id="lastPayload" class="mono">—</div>
       </div>
 
       <div class="card small">
         <div><strong>Notes:</strong></div>
         <ul style="margin:8px 0 0 16px;padding:0">
-          <li>Use Chrome/Edge for Web Serial API & camera support.</li>
-          <li>Click <strong>Calibrate Neutral</strong> while facing straight at camera to set baseline.</li>
+          <li>Use Chrome/Edge for Web Serial and Web Bluetooth support.</li>
         </ul>
       </div>
     </aside>
@@ -126,8 +137,8 @@
     const canvas = document.getElementById('output');
     const videoEl = document.getElementById('inputVideo');
     const ctx = canvas.getContext('2d');
-    const connectBtn = document.getElementById('connectBtn');
-    const calibrateBtn = document.getElementById('calibrateBtn');
+    const connectArduinoBtn = document.getElementById('connectArduinoBtn');
+    const connectMicrobitBtn = document.getElementById('connectMicrobitBtn');
     const connStatus = document.getElementById('connStatus');
 
     const rightEyeEl = document.getElementById('rightEye');
@@ -138,66 +149,337 @@
     const faceVisibleEl = document.getElementById('faceVisible');
     const lastPayloadEl = document.getElementById('lastPayload');
 
-    // mirror preview visually (same as mask-only code)
     const MIRROR_PREVIEW = true;
 
-    // ---------- Web Serial ----------
-    let port = null, writer = null, serialConnected = false;
+    // ---------- Web Serial (Arduino) ----------
+    let port = null, writer = null, reader = null, serialConnected = false;
     const encoder = new TextEncoder();
     let writeQueue = Promise.resolve();
     function queueOp(op){ writeQueue = writeQueue.then(op, op); return writeQueue; }
 
+    async function ensurePortOpen(requestIfMissing = true){
+      if (!('serial' in navigator)) throw new Error('Web Serial not supported');
+      if (port) {
+        if (port.readable === false && port.writable === false) {
+          try { await port.open({ baudRate: 115200 }); } catch(e){}
+        }
+        return port;
+      }
+      if (!requestIfMissing) throw new Error('No port available');
+      const requested = await navigator.serial.requestPort();
+      await requested.open({ baudRate: 115200 });
+      port = requested;
+      return port;
+    }
+
     async function connectArduino(){
       if (serialConnected) { await disconnectArduino(); return; }
-      if (!('serial' in navigator)) { alert('Web Serial API not supported. Use Chrome or Edge.'); return; }
       try {
-        connectBtn.textContent = 'Requesting port...';
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
-        writer = port.writable.getWriter();
+        connStatus.style.color = '';
+        connStatus.textContent = 'Requesting port...';
+        connectArduinoBtn.textContent = 'Requesting...';
+        await ensurePortOpen(true);
+        try {
+          if (!port.readable || !port.writable) {
+            await port.open({ baudRate: 115200 }).catch(()=>{});
+          }
+        } catch(e){}
+        if (port.writable) {
+          try { writer = port.writable.getWriter(); } catch(e){ writer = null; }
+        } else {
+          writer = null;
+        }
+        if (port.readable) {
+          try { reader = port.readable.getReader(); readLoop().catch(()=>{}); } catch(e){ reader = null; }
+        }
         serialConnected = true;
-        connStatus.textContent = 'Connected / Camera ready';
-        connectBtn.textContent = 'Disconnect';
-        readLoop().catch(()=>{});
+        connStatus.textContent = 'Connected to Arduino';
+        connectArduinoBtn.textContent = 'Disconnect';
+        updateButtonsVisibility();
       } catch (err) {
-        console.error('Serial open failed', err);
         serialConnected = false;
-        connStatus.textContent = 'Not connected / Camera ready';
-        connectBtn.textContent = 'Connect Arduino';
-        try { if (port) await port.close(); } catch(e) {}
-        port = null;
+        connStatus.textContent = 'Not connected';
+        connectArduinoBtn.textContent = 'Connect Arduino';
+        console.error('Serial connect error', err);
+        updateButtonsVisibility();
       }
     }
 
     async function disconnectArduino(){
-      connectBtn.textContent = 'Disconnecting...';
-      try { if (writer) { await writer.close(); writer.releaseLock(); writer = null; } } catch(e) {}
-      try { if (port) await port.close(); } catch(e) {}
-      port = null; serialConnected = false;
-      connStatus.textContent = 'Not connected / Camera ready';
-      connectBtn.textContent = 'Connect Arduino';
+      connectArduinoBtn.textContent = 'Disconnecting...';
+      connStatus.textContent = 'Disconnecting...';
+      try {
+        if (reader) {
+          await reader.cancel().catch(()=>{});
+          try { reader.releaseLock(); } catch(e){}
+          reader = null;
+        }
+      } catch(e){}
+      try {
+        if (writer) {
+          try { await writer.close(); } catch(e){}
+          try { writer.releaseLock(); } catch(e){}
+          writer = null;
+        }
+      } catch(e){}
+      try {
+        if (port) {
+          try { await port.close(); } catch(e){}
+          port = null;
+        }
+      } catch(e){}
+      serialConnected = false;
+      connStatus.textContent = 'Not connected';
+      connectArduinoBtn.textContent = 'Connect Arduino';
+      updateButtonsVisibility();
     }
 
     async function readLoop(){
       if (!port || !port.readable) return;
-      const reader = port.readable.getReader();
       try {
         while (true) {
-          const { value, done } = await reader.read();
+          const r = await reader.read();
+          if (!r) break;
+          const { value, done } = r;
           if (done) break;
         }
-      } catch (e) {} finally { try { reader.releaseLock(); } catch(e){} }
+      } catch (e) {
+      } finally {
+        try { if (reader) { reader.releaseLock(); } } catch(e){}
+        reader = null;
+        if (serialConnected) {
+          serialConnected = false;
+          connStatus.textContent = 'Not connected';
+          connectArduinoBtn.textContent = 'Connect Arduino';
+          updateButtonsVisibility();
+        }
+      }
     }
 
     function sendSerialLine(line){
-      if (!serialConnected || !writer) return;
+      if (!port) return;
       return queueOp(async () => {
-        try { await writer.write(encoder.encode(line + '\n')); } catch (e) { console.error('Write failed', e); }
+        try {
+          if (!writer && port.writable) {
+            try { writer = port.writable.getWriter(); } catch(e){ writer = null; }
+          }
+          if (!writer) throw new Error('No writer');
+          await writer.write(encoder.encode(line + '\n'));
+        } catch (e) {
+          console.warn('Serial write error', e);
+          try {
+            if (writer) { try { writer.releaseLock(); } catch(e){} writer = null; }
+            if (port && port.readable === false && port.writable === false) {
+              try { await port.close(); } catch(e){ }
+              port = null;
+              serialConnected = false;
+              connStatus.textContent = 'Not connected';
+              connectArduinoBtn.textContent = 'Connect Arduino';
+              updateButtonsVisibility();
+            }
+          } catch(e){}
+        }
       });
     }
-    connectBtn.addEventListener('click', connectArduino);
 
-    // ---------- MediaPipe FaceMesh (use same init as mask-only code) ----------
+    connectArduinoBtn.addEventListener('click', connectArduino);
+
+    // ---------- Web Bluetooth (micro:bit, UART) ----------
+    const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    const UART_NOTIFY_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+    const UART_WRITE_CHAR_UUID  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+    let bleDevice = null;
+    let bleServer = null;
+    let uartService = null;
+    let notifyChar = null;
+    let writeChar = null;
+    let bleConnected = false;
+    let bleWriteQueue = Promise.resolve();
+    const MAX_RECONNECT_ATTEMPTS = 8;
+    let reconnectAttempts = 0;
+
+    function queueGattOperation(op){ bleWriteQueue = bleWriteQueue.then(op, op); return bleWriteQueue; }
+    function safeLog(...args){ console.log('[BLE]', ...args); }
+
+    async function connectMicrobit(){
+      if (bleConnected) { await disconnectMicrobit(); return; }
+      if (!('bluetooth' in navigator)) {
+        alert('Web Bluetooth API not supported in this browser. Use Chrome/Edge on desktop or a supported mobile browser.');
+        return;
+      }
+      try {
+        connStatus.style.color = '';
+        connStatus.style.display = '';
+        connStatus.textContent = 'Requesting micro:bit...';
+        connectMicrobitBtn.textContent = 'Requesting...';
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'BBC micro:bit' }],
+          optionalServices: [UART_SERVICE_UUID]
+        });
+        if(!bleDevice) throw new Error('No device selected');
+        bleDevice.addEventListener('gattserverdisconnected', handleDisconnected);
+        connStatus.textContent = `Device: ${bleDevice.name || 'micro:bit'}`;
+        connStatus.textContent = 'Connecting...';
+        bleServer = await bleDevice.gatt.connect();
+        connStatus.textContent = 'Getting UART service...';
+        uartService = await bleServer.getPrimaryService(UART_SERVICE_UUID);
+        connStatus.textContent = 'Getting characteristics...';
+        writeChar = await uartService.getCharacteristic(UART_WRITE_CHAR_UUID).catch(()=>null);
+        notifyChar = await uartService.getCharacteristic(UART_NOTIFY_CHAR_UUID).catch(()=>null);
+        if(notifyChar && (notifyChar.properties.notify || notifyChar.properties.indicate)){
+          await notifyChar.startNotifications();
+          notifyChar.addEventListener('characteristicvaluechanged', onNotify);
+        }
+        bleConnected = true;
+        reconnectAttempts = 0;
+        connStatus.style.color = '';
+        connStatus.textContent = `Connected: ${bleDevice.name || 'micro:bit'}`;
+        connectMicrobitBtn.textContent = 'Disconnect';
+        updateButtonsVisibility();
+      } catch (err) {
+        console.error('BLE connect failed', err);
+        connStatus.textContent = 'micro:bit: connection failed';
+        connStatus.style.color = '#ff6b6b';
+        bleDevice = null;
+        bleConnected = false;
+        connectMicrobitBtn.textContent = 'Connect micro:bit';
+        updateButtonsVisibility();
+      }
+    }
+
+    async function disconnectMicrobit(){
+      connectMicrobitBtn.textContent = 'Disconnecting...';
+      try { if (notifyChar && notifyChar.stopNotifications) await notifyChar.stopNotifications(); } catch(e){}
+      try { if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) bleDevice.gatt.disconnect(); } catch(e){}
+      bleDevice = null; bleServer = null; writeChar = null; notifyChar = null;
+      bleConnected = false;
+      connectMicrobitBtn.textContent = 'Connect micro:bit';
+      connStatus.textContent = serialConnected ? 'Connected to Arduino' : 'Not connected';
+      connStatus.style.display = '';
+      updateButtonsVisibility();
+    }
+
+    function handleDisconnected(event){
+      const dev = event.target;
+      safeLog(`Device ${dev && dev.name} disconnected`);
+      bleConnected = false;
+      connStatus.textContent = 'Disconnected — attempting reconnect...';
+      connStatus.style.color = '#ffcc66';
+      attemptReconnect();
+    }
+
+    function attemptReconnect(){
+      if(!bleDevice){
+        connStatus.textContent = 'Not connected';
+        connectMicrobitBtn.textContent = 'Connect micro:bit';
+        connStatus.style.display = '';
+        updateButtonsVisibility();
+        return;
+      }
+      reconnectAttempts++;
+      if(reconnectAttempts > MAX_RECONNECT_ATTEMPTS){
+        connStatus.textContent = 'Reconnect failed — click Connect';
+        connectMicrobitBtn.textContent = 'Connect micro:bit';
+        connStatus.style.color = '#ff6b6b';
+        bleDevice = null;
+        bleConnected = false;
+        updateButtonsVisibility();
+        return;
+      }
+      const backoffMs = Math.min(1000 * Math.pow(2, reconnectAttempts-1), 20000);
+      safeLog('Reconnect attempt', reconnectAttempts, 'next in ms', backoffMs);
+      setTimeout(async () => {
+        try {
+          connStatus.textContent = `Reconnect attempt ${reconnectAttempts}...`;
+          bleServer = await bleDevice.gatt.connect();
+          uartService = await bleServer.getPrimaryService(UART_SERVICE_UUID);
+          writeChar = await uartService.getCharacteristic(UART_WRITE_CHAR_UUID).catch(()=>null);
+          notifyChar = await uartService.getCharacteristic(UART_NOTIFY_CHAR_UUID).catch(()=>null);
+          if(notifyChar && (notifyChar.properties.notify || notifyChar.properties.indicate)){
+            await notifyChar.startNotifications();
+            notifyChar.addEventListener('characteristicvaluechanged', onNotify);
+          }
+          bleConnected = true;
+          reconnectAttempts = 0;
+          connStatus.style.color = '';
+          connStatus.textContent = `Reconnected: ${bleDevice.name || 'micro:bit'}`;
+          connectMicrobitBtn.textContent = 'Disconnect';
+          updateButtonsVisibility();
+        } catch(e){
+          console.warn('Reconnect attempt failed', e);
+          attemptReconnect();
+        }
+      }, backoffMs);
+    }
+
+    function onNotify(ev){
+      const value = ev.target.value;
+      const text = new TextDecoder().decode(value);
+      safeLog('Notified:', text);
+    }
+
+    function sendUARTRaw(bytes){
+      if(!writeChar){
+        safeLog('No write characteristic - cannot send');
+        connStatus.textContent = 'Not writable - reconnect or check micro:bit firmware';
+        connStatus.style.color = '#ff6b6b';
+        return Promise.reject(new Error('No write characteristic'));
+      }
+      return queueGattOperation(async () => {
+        try {
+          if(typeof writeChar.writeValue === 'function'){
+            await writeChar.writeValue(bytes);
+          } else if(typeof writeChar.writeValueWithoutResponse === 'function'){
+            await writeChar.writeValueWithoutResponse(bytes);
+          } else {
+            if(writeChar.properties && writeChar.properties.writeWithoutResponse && typeof writeChar.writeValue === 'function'){
+              await writeChar.writeValue(bytes);
+            } else {
+              throw new Error('No writable method on characteristic');
+            }
+          }
+          safeLog('Sent bytes', bytes);
+        } catch (err){
+          console.error('Write failed', err);
+          throw err;
+        }
+      });
+    }
+
+    async function sendToMicrobit(text){
+      if(!bleConnected || !writeChar){
+        safeLog('Skipped send - not connected or writable');
+        return;
+      }
+      try {
+        const payload = encoder.encode(String(text) + '\n');
+        await sendUARTRaw(payload);
+      } catch(e){
+        console.error('sendToMicrobit error', e);
+      }
+    }
+
+    connectMicrobitBtn.addEventListener('click', connectMicrobit);
+
+    // keep buttons visible state consistent
+    function updateButtonsVisibility(){
+      if (serialConnected) {
+        connectMicrobitBtn.style.display = 'none';
+        connectArduinoBtn.style.display = '';
+        connStatus.style.display = '';
+      } else if (bleConnected) {
+        connectArduinoBtn.style.display = 'none';
+        connectMicrobitBtn.style.display = '';
+        connStatus.style.display = '';
+      } else {
+        connectMicrobitBtn.style.display = '';
+        connectArduinoBtn.style.display = '';
+        connStatus.style.display = '';
+      }
+    }
+
+    // ---------- MediaPipe FaceMesh ----------
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
     });
@@ -211,8 +493,8 @@
 
     faceMesh.onResults(onResults);
 
-    // Start camera using same config as mask-only example (ensures matching)
-    const camera = new Camera(videoEl, {
+    // Start camera; canvas internal size already 1280x720
+    let camera = new Camera(videoEl, {
       onFrame: async () => { await faceMesh.send({ image: videoEl }); },
       width: 1280,
       height: 720,
@@ -221,8 +503,7 @@
 
     camera.start().then(() => {
       connStatus.textContent = 'Not connected / Camera ready';
-      // keep canvas pixel size matching attribute (1280x720). The mask-only code used fixed canvas size.
-      // If you want to reduce shown height, change CSS .video-wrap min-height or canvas display size.
+      updateButtonsVisibility();
     }).catch((e) => {
       console.error('Camera start failed', e);
       connStatus.textContent = 'Camera unavailable';
@@ -260,11 +541,8 @@
     const HEAD_X_THRESHOLD = 0.035;
     const HEAD_Y_THRESHOLD = 0.035;
 
-    // baseline for neutral head; re-calibrate by clearing baseline
+    // baseline for neutral head (first detected frame)
     let baseline = null;
-    calibrateBtn.addEventListener('click', () => { baseline = null; connStatus.textContent = 'Baseline cleared — will recalibrate on next face frame'; });
-
-    let lastSent = '';
 
     // draw exactly the mask-only visuals (matching)
     function drawMaskExact(landmarks){
@@ -277,21 +555,20 @@
       drawConnectors(ctx, landmarks, FACEMESH_LIPS, {color: '#FF6347', lineWidth: 2});
     }
 
-    // ---------- main results callback (merged) ----------
+    // ---------- main results callback ----------
+    let lastSent = '';
     function onResults(results){
-      // Use the same drawing technique as mask-only code so overlay matches precisely
+      // Draw video + mask overlay exactly as mask-only code
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Mirror preview for selfie mode (canvas.width is 1280, canvas.height is 720)
       if (MIRROR_PREVIEW){
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
       }
-      // draw video frame into canvas
+
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-      // draw mask connectors exactly as the mask-only code
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0){
         for (const landmarks of results.multiFaceLandmarks){
           drawMaskExact(landmarks);
@@ -300,7 +577,7 @@
 
       ctx.restore();
 
-      // --- compute detection/states using raw normalized landmarks (NOT mirrored) ---
+      // Detection stats and payload
       const hasFace = !!(results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0);
       if (!hasFace){
         rightEyeEl.textContent = '—';
@@ -316,7 +593,6 @@
 
       const landmarks = results.multiFaceLandmarks[0];
 
-      // compute ratios
       const rRatio = eyeRatio(landmarks, RIGHT_EYE_IDX);
       const lRatio = eyeRatio(landmarks, LEFT_EYE_IDX);
       const mRatio = mouthRatio(landmarks);
@@ -325,7 +601,6 @@
       const leftEyeState  = lRatio > EYE_OPEN_THRESHOLD ? 1 : 0;
       const mouthState    = mRatio > MOUTH_OPEN_THRESHOLD ? 1 : 0;
 
-      // baseline by nose tip (normalized)
       const nose = landmarks[NOSE_TIP];
       if (!baseline) baseline = { x: nose.x, y: nose.y };
 
@@ -344,7 +619,6 @@
 
       const faceVisible = 1;
 
-      // update UI (arranged)
       leftEyeEl.textContent = leftEyeState;
       rightEyeEl.textContent = rightEyeState;
       headHEl.textContent = headH;
@@ -352,19 +626,64 @@
       mouthEl.textContent = mouthState;
       faceVisibleEl.textContent = faceVisible;
 
-      // payload
-      const payload = `R:${rightEyeState},L:${leftEyeState},M:${mouthState},V:${headV},H:${headH},F:${faceVisible}`;
+      const payload = `R${rightEyeState},L${leftEyeState},M${mouthState},V${headV},H${headH},F${faceVisible}`;
       if (payload !== lastSent){
         lastSent = payload;
         lastPayloadEl.textContent = payload;
-        if (serialConnected) sendSerialLine(payload);
+        if (serialConnected) {
+          sendSerialLine(payload);
+        } else if (bleConnected) {
+          sendToMicrobit(payload).catch(e=>console.warn('BLE send failed', e));
+        }
       }
     }
 
     // cleanup on unload
     window.addEventListener('beforeunload', async () => {
-      try { if (writer) { await writer.close(); writer = null; } if (port) { await port.close(); } } catch (e) {}
+      try {
+        if (reader) { await reader.cancel().catch(()=>{}); try { reader.releaseLock(); } catch(e){} reader = null; }
+      } catch(e){}
+      try { if (writer) { try { await writer.close(); } catch(e){} try { writer.releaseLock(); } catch(e){} writer = null; } } catch(e){}
+      try { if (port) { try { await port.close(); } catch(e){} port = null; } } catch(e){}
+      try { if (notifyChar && notifyChar.stopNotifications) await notifyChar.stopNotifications(); } catch(e){}
+      try { if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) bleDevice.gatt.disconnect(); } catch(e){}
     });
+
+    // small state monitor to keep UI consistent
+    const stateMonitorInterval = setInterval(() => {
+      if (bleDevice && bleDevice.gatt) {
+        const nowBle = !!bleDevice.gatt.connected;
+        if (nowBle !== bleConnected) {
+          bleConnected = nowBle;
+          connStatus.style.display = bleConnected ? '' : '';
+          connStatus.textContent = bleConnected ? `Connected: ${bleDevice.name || 'micro:bit'}` : 'Not connected';
+          connectMicrobitBtn.textContent = bleConnected ? 'Disconnect' : 'Connect micro:bit';
+          updateButtonsVisibility();
+        }
+      }
+      if (port) {
+        const writable = !!port.writable;
+        const readable = !!port.readable;
+        const nowSerial = writable || readable || serialConnected;
+        if (!nowSerial && serialConnected) {
+          serialConnected = false;
+        }
+      }
+      if (serialConnected) {
+        connStatus.style.display = '';
+        connStatus.textContent = 'Connected to Arduino';
+        connectArduinoBtn.textContent = 'Disconnect';
+      } else {
+        if (!bleConnected) {
+          connStatus.style.display = '';
+          connStatus.textContent = 'Not connected';
+        } else {
+          // BLE branch has set status
+        }
+        connectArduinoBtn.textContent = 'Connect Arduino';
+      }
+      updateButtonsVisibility();
+    }, 1500);
   </script>
 </body>
 </html>
