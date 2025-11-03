@@ -1,3 +1,13 @@
+### Microbit Code to Receive the Data from Face Detection and Tracking App
+
+[Open in MakeCode Editor](https://makecode.microbit.org/_TYEayHArWU2o)
+
+<img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/baebb085-ff00-4a14-9508-a98efe41bee0" />
+
+---
+
+### Arduino Code to Receive the Data from Face Detection and Tracking App
+
 ```C++
 int leftEye, rightEye, mouth, faceVisible, headHorizontal, headVertical;
 
